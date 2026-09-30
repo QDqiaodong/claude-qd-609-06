@@ -39,11 +39,14 @@ public class RoundService {
     private final RoundRepository roundRepository;
     private final MemberRepository memberRepository;
     private final LaneRepository laneRepository;
+    private final GuardianService guardianService;
 
-    public RoundService(RoundRepository roundRepository, MemberRepository memberRepository, LaneRepository laneRepository) {
+    public RoundService(RoundRepository roundRepository, MemberRepository memberRepository,
+            LaneRepository laneRepository, GuardianService guardianService) {
         this.roundRepository = roundRepository;
         this.memberRepository = memberRepository;
         this.laneRepository = laneRepository;
+        this.guardianService = guardianService;
     }
 
     @Transactional(readOnly = true)
@@ -94,6 +97,8 @@ public class RoundService {
         if (!RangeDict.isValidBowType(bowType)) {
             throw new BizException("弓种只能是 反曲弓 / 复合弓 / 传统弓");
         }
+        // 未成年会员必须已经完成监护授权接管、训练签到以及课程/箭道/器材整组使用。
+        guardianService.gateRoundStart(member, req.laneId(), bowType);
 
         Round round = new Round();
         round.setRoundNo(nextRoundNo());

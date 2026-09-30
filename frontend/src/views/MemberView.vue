@@ -94,6 +94,9 @@
           </el-select>
         </el-form-item>
         <el-form-item label="初始余额"><el-input-number v-model="createForm.balance" :min="0" :step="100" /></el-form-item>
+        <el-form-item label="出生日期">
+          <el-date-picker v-model="createForm.birthDate" type="date" value-format="YYYY-MM-DD" placeholder="未成年会员必填" style="width: 100%" />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
@@ -513,7 +516,7 @@ const pick = ref(null)
 const certPick = ref(null)
 const rechargeAmount = ref(200)
 const certData = ref({ current: [], history: [] })
-const createForm = reactive({ cardNo: '', name: '', phone: '', level: 'NORMAL', balance: 200 })
+const createForm = reactive({ cardNo: '', name: '', phone: '', level: 'NORMAL', balance: 200, birthDate: null })
 
 // 个人最好（按可比组别）
 const bestsVisible = ref(false)
@@ -626,6 +629,7 @@ async function submitCreate() {
   createForm.cardNo = ''
   createForm.name = ''
   createForm.phone = ''
+  createForm.birthDate = null
   await loadMembers()
 }
 

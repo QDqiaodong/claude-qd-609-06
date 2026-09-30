@@ -21,11 +21,14 @@ public class LaneService {
     private final LaneRepository laneRepository;
     private final MemberService memberService;
     private final CertService certService;
+    private final GuardianService guardianService;
 
-    public LaneService(LaneRepository laneRepository, MemberService memberService, CertService certService) {
+    public LaneService(LaneRepository laneRepository, MemberService memberService, CertService certService,
+            GuardianService guardianService) {
         this.laneRepository = laneRepository;
         this.memberService = memberService;
         this.certService = certService;
+        this.guardianService = guardianService;
     }
 
     @Transactional(readOnly = true)
@@ -83,6 +86,8 @@ public class LaneService {
         Member member = memberService.require(req.memberId());
         // 已合并封存的来源档案不能再开台（旧卡入口应跳转到保留档案）
         memberService.rejectIfMerged(member, "开台");
+        // 未成年会员必须完成现场接管和训练前箭道放行；成年会员保持原流程。
+        guardianService.gateResource(member, "LANE", id, "箭道开台");
         // 30 / 50 米为认证射距：必须持有覆盖该射距的当前有效弓种认证（过期 / 撤回 / 被取代立即失效）
         certService.requireDistanceCert(member, lane.getDistance());
         BigDecimal cost = lane.getHourlyPrice()

@@ -21,11 +21,14 @@ public class CourseService {
     private final CourseRepository courseRepository;
     private final CourseEnrollRepository enrollRepository;
     private final MemberService memberService;
+    private final GuardianService guardianService;
 
-    public CourseService(CourseRepository courseRepository, CourseEnrollRepository enrollRepository, MemberService memberService) {
+    public CourseService(CourseRepository courseRepository, CourseEnrollRepository enrollRepository,
+            MemberService memberService, GuardianService guardianService) {
         this.courseRepository = courseRepository;
         this.enrollRepository = enrollRepository;
         this.memberService = memberService;
+        this.guardianService = guardianService;
     }
 
     @Transactional(readOnly = true)
@@ -77,6 +80,8 @@ public class CourseService {
             throw new BizException(RangeDict.courseLevelName(course.getLevel()) + "课程仅面向"
                     + RangeDict.memberLevelName(needLevel) + "及以上，会员 [" + member.getName() + "] 等级不足");
         }
+        // 未成年会员：必须由当前有效授权 + 本次现场交接的课程放行项覆盖，报名成功即实际使用。
+        guardianService.gateResource(member, "COURSE", id, "报名课程");
         CourseEnroll enroll = new CourseEnroll();
         enroll.setCourse(course);
         enroll.setMember(member);

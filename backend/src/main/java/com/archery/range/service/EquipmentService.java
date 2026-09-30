@@ -22,13 +22,16 @@ public class EquipmentService {
     private final MemberService memberService;
     private final CertService certService;
     private final DamageSettlementService damageSettlementService;
+    private final GuardianService guardianService;
 
     public EquipmentService(EquipmentRepository equipmentRepository, MemberService memberService,
-            CertService certService, DamageSettlementService damageSettlementService) {
+            CertService certService, DamageSettlementService damageSettlementService,
+            GuardianService guardianService) {
         this.equipmentRepository = equipmentRepository;
         this.memberService = memberService;
         this.certService = certService;
         this.damageSettlementService = damageSettlementService;
+        this.guardianService = guardianService;
     }
 
     @Transactional(readOnly = true)
@@ -75,6 +78,8 @@ public class EquipmentService {
         Member member = memberService.require(req.memberId());
         // 已合并封存的来源档案不能再租借器材
         memberService.rejectIfMerged(member, "租借器材");
+        // 未成年会员只能领用本次交接已整组放行的器材；成年会员保持原流程。
+        guardianService.gateResource(member, "EQUIPMENT", id, "领用器材");
         // 有待缴损伤费用的会员已被暂停租借资格，补足欠款解限前不能再租借
         if (damageSettlementService.isRentalBlocked(member.getId())) {
             throw new BizException("会员 [" + member.getName() + "] 存在未结清的器材损伤待缴费用，"

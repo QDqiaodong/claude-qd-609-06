@@ -79,6 +79,7 @@ public class MemberService {
         member.setLevel(req.level());
         member.setBalance(req.balance().setScale(2, RoundingMode.HALF_UP));
         member.setRegisterDate(LocalDate.now());
+        member.setBirthDate(req.birthDate());
         member.setTotalSpend(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
         return toView(memberRepository.save(member));
     }
@@ -108,6 +109,11 @@ public class MemberService {
                     + " 合并封存（原因：" + (member.getMergeReason() == null ? "" : member.getMergeReason())
                     + "），不能再" + action + target);
         }
+    }
+
+    public static boolean isMinor(Member member) {
+        return member != null && member.getBirthDate() != null
+                && member.getBirthDate().plusYears(18).isAfter(LocalDate.now());
     }
 
     private String mergedTargetCard(Long targetId) {
@@ -172,6 +178,8 @@ public class MemberService {
                 RangeDict.memberLevelName(member.getLevel()),
                 member.getBalance(),
                 member.getRegisterDate(),
+                member.getBirthDate(),
+                isMinor(member),
                 member.getTotalSpend(),
                 RangeDict.memberDiscount(member.getLevel()),
                 roundRepository.countByMemberId(member.getId()),

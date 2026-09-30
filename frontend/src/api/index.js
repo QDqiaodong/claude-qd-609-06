@@ -157,6 +157,31 @@ export const certApi = {
   memberCerts: (memberId) => http.get(`/cert/members/${memberId}`)
 }
 
+/** 模块十一：未成年会员监护授权台 */
+export const guardianApi = {
+  minorOptions: () => http.get('/guardian/minors/options'),
+  detailByMinor: (minorId) => http.get(`/guardian/authorizations/by-minor/${minorId}`),
+  authorization: (id) => http.get(`/guardian/authorizations/${id}`),
+  createDraft: (data) => http.post('/guardian/authorizations/drafts', data),
+  updateDraft: (data) => http.post('/guardian/authorizations/drafts/update', data),
+  submit: (id, data) => http.post(`/guardian/authorizations/versions/${id}/submit`, data),
+  confirm: (id, data) => http.post(`/guardian/authorizations/versions/${id}/confirm`, data),
+  revise: (data) => http.post('/guardian/authorizations/revisions', data),
+  pause: (id, data) => http.post(`/guardian/authorizations/versions/${id}/pause`, data),
+  resume: (id, data) => http.post(`/guardian/authorizations/versions/${id}/resume`, data),
+  revoke: (id, data) => http.post(`/guardian/authorizations/versions/${id}/revoke`, data),
+  handovers: (minorId) => http.get('/guardian/handovers', { params: { minorId } }),
+  openHandovers: () => http.get('/guardian/handovers/open'),
+  handover: (id) => http.get(`/guardian/handovers/${id}`),
+  createHandover: (data) => http.post('/guardian/handovers', data),
+  takeover: (data) => http.post('/guardian/handovers/takeover', data),
+  rebaseline: (data) => http.post('/guardian/handovers/rebaseline', data),
+  precheckTraining: (data) => http.post('/guardian/handovers/precheck-training', data),
+  startTraining: (id, data) => http.post(`/guardian/handovers/${id}/start-training`, data),
+  finishTraining: (id, data) => http.post(`/guardian/handovers/${id}/finish-training`, data),
+  returnMinor: (data) => http.post('/guardian/handovers/return', data)
+}
+
 export const statsApi = {
   board: () => http.get('/stats/board')
 }

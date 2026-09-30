@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS members (
   level         VARCHAR(16)  NOT NULL COMMENT 'NORMAL 普通 / SILVER 银 / GOLD 金',
   balance       DECIMAL(10,2) NOT NULL COMMENT '余额',
   register_date DATE         NOT NULL COMMENT '注册日期',
+  birth_date    DATE         NULL COMMENT '出生日期；为空按成年会员处理',
   total_spend   DECIMAL(12,2) NOT NULL COMMENT '累计消费',
   status        VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE 在用 / MERGED 已合并封存（历史档案，不可继续使用）',
   merged_into_id BIGINT      NULL COMMENT '封存时合并去向的保留会员 id（不加外键，避免与合并流程相互锁定）',
@@ -311,6 +312,8 @@ INSERT INTO members (`id`, `card_no`, `name`, `phone`, `level`, `balance`, `regi
 INSERT INTO members (`id`, `card_no`, `name`, `phone`, `level`, `balance`, `register_date`, `total_spend`) VALUES (10, 'AR-2025-0010', '许静', '13800010010', 'NORMAL', 260.00, '2025-01-12', 520.00);
 INSERT INTO members (`id`, `card_no`, `name`, `phone`, `level`, `balance`, `register_date`, `total_spend`) VALUES (11, 'AR-2025-0011', '高翔', '13800010011', 'SILVER', 1560.00, '2025-03-08', 5200.00);
 INSERT INTO members (`id`, `card_no`, `name`, `phone`, `level`, `balance`, `register_date`, `total_spend`) VALUES (12, 'AR-2025-0012', '唐宁', '13800010012', 'NORMAL', 100.00, '2025-05-27', 180.00);
+UPDATE members SET birth_date = '2010-06-01' WHERE id = 10;
+UPDATE members SET birth_date = '2012-09-10' WHERE id = 12;
 
 -- rounds：13 行（bow_type 记录本回合使用弓种，是弓种认证的证据字段之一）
 INSERT INTO rounds (`id`, `round_no`, `member_id`, `lane_id`, `bow_type`, `start_time`, `completed_at`, `arrow_count`, `total_score`, `average_score`, `personal_best`, `status`) VALUES (1, 'R20260915001', 1, 1, 'RECURVE', '2026-09-15 19:10:00', '2026-09-15 19:10:00', 6, 58, 9.67, 1, 'SUBMITTED');
@@ -1023,3 +1026,156 @@ INSERT INTO damage_pricing_rule (`id`, `equip_type`, `severity`, `effective_date
 INSERT INTO damage_pricing_rule (`id`, `equip_type`, `severity`, `effective_date`, `fee`, `repair_flag`, `scrap_flag`, `status`, `note`, `created_by`, `created_at`) VALUES (15, 'ARROW', 'SEVERE', '2026-09-01', 120.00, 0, 1, 'ACTIVE', '箭杆断裂 / 箭头松动无法修复：收费并报废封存', '值班经理', '2026-09-01 09:00:00');
 
 INSERT INTO cert_log (`id`, `application_id`, `action`, `operator`, `role`, `detail`, `created_at`) VALUES (10, 3, 'WITHDRAW', '王铮', 'COACH', '撤回认证：抽查发现证据窗口与实际训练记录不符，撤回并要求重新评定', '2026-09-25 15:00:00');
+
+-- ================= 未成年会员监护授权台 =================
+-- 授权聚合根：一个未成年会员一份档案；版本不可变，历史版本继续可查但不作为当前基线。
+CREATE TABLE IF NOT EXISTS guardian_authorization (
+  id                 BIGINT       NOT NULL AUTO_INCREMENT,
+  minor_id           BIGINT       NOT NULL,
+  minor_name         VARCHAR(32)  NOT NULL,
+  current_version_id BIGINT       NULL,
+  created_by         VARCHAR(32)  NOT NULL,
+  created_at         DATETIME     NOT NULL,
+  updated_at         DATETIME     NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_guardian_auth_minor (minor_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS guardian_authorization_version (
+  id                     BIGINT       NOT NULL AUTO_INCREMENT,
+  authorization_id       BIGINT       NOT NULL,
+  minor_id               BIGINT       NOT NULL,
+  version_no             INT          NOT NULL,
+  status                 VARCHAR(16)  NOT NULL COMMENT 'DRAFT/PENDING/VALID/PAUSED/REVOKED/SUPERSEDED，EXPIRED 查询派生',
+  guardian_name          VARCHAR(32)  NOT NULL,
+  guardian_phone         VARCHAR(20)  NOT NULL,
+  effective_date         DATE         NOT NULL,
+  termination_date       DATE         NOT NULL,
+  emergency_contact_name VARCHAR(32)  NOT NULL,
+  emergency_contact_phone VARCHAR(20) NOT NULL,
+  remarks                VARCHAR(1000) NULL,
+  created_by             VARCHAR(32)  NOT NULL,
+  created_at             DATETIME     NOT NULL,
+  submitted_at           DATETIME     NULL,
+  confirmed_at           DATETIME     NULL,
+  confirmed_by           VARCHAR(32)  NULL,
+  status_changed_at      DATETIME     NULL,
+  status_changed_by      VARCHAR(32)  NULL,
+  change_reason          VARCHAR(500) NULL,
+  PRIMARY KEY (id),
+  KEY idx_gav_auth (authorization_id, version_no),
+  KEY idx_gav_minor (minor_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS guardian_version_course (
+  version_id BIGINT NOT NULL,
+  course_id  BIGINT NOT NULL,
+  PRIMARY KEY (version_id, course_id),
+  KEY idx_gvc_course (course_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS guardian_version_lane (
+  version_id BIGINT NOT NULL,
+  lane_id    BIGINT NOT NULL,
+  PRIMARY KEY (version_id, lane_id),
+  KEY idx_gvl_lane (lane_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS guardian_version_equipment (
+  version_id   BIGINT NOT NULL,
+  equipment_id BIGINT NOT NULL,
+  PRIMARY KEY (version_id, equipment_id),
+  KEY idx_gve_equipment (equipment_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS guardian_version_caretaker (
+  version_id     BIGINT      NOT NULL,
+  caretaker_name VARCHAR(32) NOT NULL,
+  PRIMARY KEY (version_id, caretaker_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS guardian_authorization_history (
+  id                   BIGINT       NOT NULL AUTO_INCREMENT,
+  authorization_id     BIGINT       NOT NULL,
+  version_id           BIGINT       NOT NULL,
+  version_no           INT          NOT NULL,
+  action               VARCHAR(32)  NOT NULL,
+  from_status          VARCHAR(16)  NULL,
+  to_status            VARCHAR(16)  NOT NULL,
+  baseline_before_json TEXT         NULL,
+  baseline_after_json  TEXT         NULL,
+  operator             VARCHAR(32)  NOT NULL,
+  operated_at          DATETIME     NOT NULL,
+  reason               VARCHAR(500) NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_gah_auth (authorization_id, id),
+  KEY idx_gah_version (version_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 每次到馆独立交接单；未 RETURNED 的记录禁止开启该未成年会员的下一次到馆。
+CREATE TABLE IF NOT EXISTS guardian_handover (
+  id                               BIGINT       NOT NULL AUTO_INCREMENT,
+  handover_no                      VARCHAR(24)  NOT NULL,
+  minor_id                         BIGINT       NOT NULL,
+  minor_name                       VARCHAR(32)  NOT NULL,
+  authorization_id                 BIGINT       NOT NULL,
+  authorization_version_id         BIGINT       NOT NULL,
+  version_no                       INT          NOT NULL,
+  stage                            VARCHAR(24)  NOT NULL COMMENT 'WAITING_TAKEOVER/TAKEN_OVER/TRAINING/WAITING_RETURN/RETURNED',
+  baseline_json                    TEXT         NOT NULL,
+  actual_caretaker                 VARCHAR(32)  NULL,
+  caretaker_identity_no            VARCHAR(40)  NULL,
+  taken_over_by                    VARCHAR(32)  NULL,
+  taken_over_at                    DATETIME     NULL,
+  training_started_by              VARCHAR(32)  NULL,
+  training_started_at              DATETIME     NULL,
+  waiting_return_at                DATETIME     NULL,
+  waiting_return_by                VARCHAR(32)  NULL,
+  returned_caretaker               VARCHAR(32)  NULL,
+  returned_by                      VARCHAR(32)  NULL,
+  returned_at                      DATETIME     NULL,
+  baseline_changed_after_takeover  TINYINT(1)   NOT NULL DEFAULT 0,
+  frozen                           TINYINT(1)   NOT NULL DEFAULT 0,
+  freeze_reason                    VARCHAR(500) NULL,
+  frozen_at                        DATETIME     NULL,
+  created_by                       VARCHAR(32)  NOT NULL,
+  created_at                       DATETIME     NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_guardian_handover_no (handover_no),
+  KEY idx_gh_minor_stage (minor_id, stage),
+  KEY idx_gh_stage (stage)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS guardian_handover_resource (
+  id            BIGINT       NOT NULL AUTO_INCREMENT,
+  handover_id   BIGINT       NOT NULL,
+  resource_type VARCHAR(16)  NOT NULL,
+  resource_id   BIGINT       NOT NULL,
+  resource_name VARCHAR(64)  NOT NULL,
+  status        VARCHAR(16)  NOT NULL,
+  request_id    VARCHAR(64)  NULL,
+  cleared_at    DATETIME     NULL,
+  used_at       DATETIME     NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_ghr_request_resource (request_id, resource_type, resource_id),
+  KEY idx_ghr_handover (handover_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS guardian_handover_history (
+  id                   BIGINT       NOT NULL AUTO_INCREMENT,
+  handover_id          BIGINT       NOT NULL,
+  action               VARCHAR(32)  NOT NULL,
+  from_stage           VARCHAR(24)  NULL,
+  to_stage             VARCHAR(24)  NULL,
+  version_id           BIGINT       NOT NULL,
+  version_no           INT          NOT NULL,
+  baseline_before_json TEXT         NULL,
+  baseline_after_json  TEXT         NULL,
+  blocked_stage        VARCHAR(24)  NULL,
+  block_reason         VARCHAR(500) NULL,
+  operator             VARCHAR(32)  NOT NULL,
+  operated_at          DATETIME     NOT NULL,
+  reason               VARCHAR(500) NULL,
+  PRIMARY KEY (id),
+  KEY idx_ghh_handover (handover_id, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

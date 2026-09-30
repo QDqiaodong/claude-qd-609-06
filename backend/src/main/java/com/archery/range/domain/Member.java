@@ -48,6 +48,10 @@ public class Member {
     @Column(name = "register_date", nullable = false)
     private LocalDate registerDate;
 
+    /** 出生日期：为空按成年会员处理；现有成年会员流程不变。 */
+    @Column(name = "birth_date")
+    private LocalDate birthDate;
+
     @Column(name = "total_spend", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalSpend;
 
@@ -123,6 +127,14 @@ public class Member {
 
     public void setRegisterDate(LocalDate registerDate) {
         this.registerDate = registerDate;
+    }
+
+    public LocalDate getBirthDate() {
+        return birthDate;
+    }
+
+    public void setBirthDate(LocalDate birthDate) {
+        this.birthDate = birthDate;
     }
 
     public BigDecimal getTotalSpend() {

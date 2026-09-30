@@ -22,7 +22,8 @@ public final class MemberDtos {
             @NotBlank(message = "姓名不能为空") String name,
             @NotBlank(message = "手机号不能为空") @Pattern(regexp = "1[3-9]\\d{9}", message = "手机号格式不正确") String phone,
             @NotBlank(message = "请选择会员等级") String level,
-            @NotNull(message = "请填写初始余额") @DecimalMin(value = "0", message = "余额不能为负") BigDecimal balance) {
+            @NotNull(message = "请填写初始余额") @DecimalMin(value = "0", message = "余额不能为负") BigDecimal balance,
+            LocalDate birthDate) {
     }
 
     public record RechargeReq(
@@ -38,6 +39,8 @@ public final class MemberDtos {
             String levelName,
             BigDecimal balance,
             LocalDate registerDate,
+            LocalDate birthDate,
+            boolean minor,
             BigDecimal totalSpend,
             BigDecimal discount,
             Long roundCount,

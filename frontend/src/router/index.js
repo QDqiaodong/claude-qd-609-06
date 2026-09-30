@@ -10,6 +10,7 @@ export const navItems = [
   { key: 'tournament', path: '/tournament', icon: '🏆', label: '淘汰赛', hint: '团体淘汰赛计分台：赛事总览 · 对阵树 · 单场记分', badge: 'tournamentOngoing', unit: '进行中' },
   { key: 'safety', path: '/safety', icon: '🛑', label: '联锁', hint: '安全停射联锁台：停射事件 · 双人复核 · 复射放行', badge: 'safetyActive', unit: '起' },
   { key: 'cert', path: '/cert', icon: '🎖️', label: '认证', hint: '弓种能力认证：证据窗口 · 版本化规则 · 教练复核 · 有效期', badge: 'certPending', unit: '待复核' },
+  { key: 'guardian', path: '/guardian', icon: '🧑‍🤝‍🧑', label: '监护', hint: '未成年监护授权：版本确认 · 现场接管 · 资源放行 · 安全交还', badge: 'guardianOpen', unit: '单未交还' },
   { key: 'courses', path: '/courses', icon: '📚', label: '课程', hint: '卡片列表，满员禁用报名', badge: 'courseTotal', unit: '门' },
   { key: 'equipment', path: '/equipment', icon: '🧰', label: '器材', hint: '表格 + 租借归还', badge: 'equipRented', unit: '租出' },
   { key: 'damage', path: '/damage', icon: '🧾', label: '清算', hint: '器材损伤清算：发起检查 · 费用明细 · 异议处理 · 补缴解限', badge: 'damageSettling', unit: '单处理中' }
@@ -24,6 +25,7 @@ const routes = [
   { path: '/tournament', name: 'tournament', component: () => import('../views/TournamentView.vue') },
   { path: '/safety', name: 'safety', component: () => import('../views/SafetyView.vue') },
   { path: '/cert', name: 'cert', component: () => import('../views/CertView.vue') },
+  { path: '/guardian', name: 'guardian', component: () => import('../views/GuardianView.vue') },
   { path: '/courses', name: 'courses', component: () => import('../views/CourseView.vue') },
   { path: '/equipment', name: 'equipment', component: () => import('../views/EquipmentView.vue') },
   { path: '/damage', name: 'damage', component: () => import('../views/DamageView.vue') },

@@ -15,6 +15,7 @@ import com.archery.range.repository.ArrowScoreRepository;
 import com.archery.range.repository.CertApplicationRepository;
 import com.archery.range.repository.CourseRepository;
 import com.archery.range.repository.EquipmentRepository;
+import com.archery.range.repository.GuardianHandoverRepository;
 import com.archery.range.repository.LaneRepository;
 import com.archery.range.repository.MemberRepository;
 import com.archery.range.repository.RoundRepository;
@@ -38,6 +39,7 @@ public class StatsService {
     private final CertApplicationRepository certApplicationRepository;
     private final com.archery.range.repository.DamageSettlementRepository damageSettlementRepository;
     private final com.archery.range.repository.MemberDebtRepository memberDebtRepository;
+    private final GuardianHandoverRepository guardianHandoverRepository;
     private final RoundService roundService;
 
     public StatsService(LaneRepository laneRepository,
@@ -51,6 +53,7 @@ public class StatsService {
             CertApplicationRepository certApplicationRepository,
             com.archery.range.repository.DamageSettlementRepository damageSettlementRepository,
             com.archery.range.repository.MemberDebtRepository memberDebtRepository,
+            GuardianHandoverRepository guardianHandoverRepository,
             RoundService roundService) {
         this.laneRepository = laneRepository;
         this.memberRepository = memberRepository;
@@ -63,6 +66,7 @@ public class StatsService {
         this.certApplicationRepository = certApplicationRepository;
         this.damageSettlementRepository = damageSettlementRepository;
         this.memberDebtRepository = memberDebtRepository;
+        this.guardianHandoverRepository = guardianHandoverRepository;
         this.roundService = roundService;
     }
 
@@ -84,6 +88,7 @@ public class StatsService {
         counters.put("equipRented", equipmentRepository.findByStatusOrderByEquipCodeAsc("RENTED").size());
         counters.put("safetyActive", safetyEventRepository.countByStatusNot("RELEASED"));
         counters.put("certPending", certApplicationRepository.countByStatus("PENDING"));
+        counters.put("guardianOpen", handoverOpenCount());
         counters.put("tournamentTotal", tournamentRepository.count());
         counters.put("tournamentOngoing", tournamentRepository.countByStatus("ONGOING"));
         counters.put("damageSettling", damageSettlementRepository.findByStatusNotOrderByIdDesc("SETTLED").size());
@@ -103,5 +108,11 @@ public class StatsService {
         board.put("keypadRings", RangeDict.KEYPAD_RINGS);
         board.put("groupSizes", RangeDict.GROUP_SIZES);
         return board;
+    }
+
+    private long handoverOpenCount() {
+        return guardianHandoverRepository.findAll().stream()
+                .filter(item -> !"RETURNED".equals(item.getStage()))
+                .count();
     }
 }

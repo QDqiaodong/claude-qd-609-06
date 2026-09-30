@@ -29,6 +29,9 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
 
     List<Member> findByLevelAndStatusOrderByIdAsc(String level, String status);
 
+    /** 监护授权台的未成年会员名单（默认只看在用档案） */
+    List<Member> findByMinorFlagTrueAndStatusOrderByIdAsc(String status);
+
     boolean existsByPhone(String phone);
 
     boolean existsByCardNo(String cardNo);

@@ -22,13 +22,16 @@ public class EquipmentService {
     private final MemberService memberService;
     private final CertService certService;
     private final DamageSettlementService damageSettlementService;
+    private final MinorVisitService minorVisitService;
 
     public EquipmentService(EquipmentRepository equipmentRepository, MemberService memberService,
-            CertService certService, DamageSettlementService damageSettlementService) {
+            CertService certService, DamageSettlementService damageSettlementService,
+            MinorVisitService minorVisitService) {
         this.equipmentRepository = equipmentRepository;
         this.memberService = memberService;
         this.certService = certService;
         this.damageSettlementService = damageSettlementService;
+        this.minorVisitService = minorVisitService;
     }
 
     @Transactional(readOnly = true)
@@ -82,6 +85,12 @@ public class EquipmentService {
         }
         // 租借弓类器材必须持有该弓种的当前有效认证（护具 / 箭支不限制）
         certService.requireBowCert(member, equipment.getType());
+        // 未成年会员：器材须在当前有效授权范围内、且已在本次到馆交接中整组放行
+        if (member.isMinorFlag()) {
+            minorVisitService.guard(member,
+                    com.archery.range.domain.MinorVisitResource.EQUIPMENT, equipment.getId(),
+                    "租借器材 [" + equipment.getEquipCode() + "]");
+        }
         memberService.charge(member, equipment.getRentPrice(), "租借 " + equipment.getEquipCode());
 
         equipment.setStatus("RENTED");

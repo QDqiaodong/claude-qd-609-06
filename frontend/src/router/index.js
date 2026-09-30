@@ -12,7 +12,8 @@ export const navItems = [
   { key: 'cert', path: '/cert', icon: '🎖️', label: '认证', hint: '弓种能力认证：证据窗口 · 版本化规则 · 教练复核 · 有效期', badge: 'certPending', unit: '待复核' },
   { key: 'courses', path: '/courses', icon: '📚', label: '课程', hint: '卡片列表，满员禁用报名', badge: 'courseTotal', unit: '门' },
   { key: 'equipment', path: '/equipment', icon: '🧰', label: '器材', hint: '表格 + 租借归还', badge: 'equipRented', unit: '租出' },
-  { key: 'damage', path: '/damage', icon: '🧾', label: '清算', hint: '器材损伤清算：发起检查 · 费用明细 · 异议处理 · 补缴解限', badge: 'damageSettling', unit: '单处理中' }
+  { key: 'damage', path: '/damage', icon: '🧾', label: '清算', hint: '器材损伤清算：发起检查 · 费用明细 · 异议处理 · 补缴解限', badge: 'damageSettling', unit: '单处理中' },
+  { key: 'guardian', path: '/guardian', icon: '🧒', label: '监护授权', hint: '未成年会员监护授权台：授权版本 · 接管核验 · 资源放行 · 安全交还', badge: 'visitOpen', unit: '在馆交接' }
 ]
 
 export const memberItem = { key: 'members', path: '/members', icon: '🪪', label: '会员', hint: '开卡 / 充值 / 等级', badge: 'memberTotal', unit: '人' }
@@ -27,6 +28,7 @@ const routes = [
   { path: '/courses', name: 'courses', component: () => import('../views/CourseView.vue') },
   { path: '/equipment', name: 'equipment', component: () => import('../views/EquipmentView.vue') },
   { path: '/damage', name: 'damage', component: () => import('../views/DamageView.vue') },
+  { path: '/guardian', name: 'guardian', component: () => import('../views/GuardianView.vue') },
   { path: '/members', name: 'members', component: () => import('../views/MemberView.vue') },
   { path: '/:pathMatch(.*)*', redirect: '/lanes' }
 ]

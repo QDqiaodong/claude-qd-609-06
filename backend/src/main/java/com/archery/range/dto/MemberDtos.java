@@ -22,7 +22,16 @@ public final class MemberDtos {
             @NotBlank(message = "姓名不能为空") String name,
             @NotBlank(message = "手机号不能为空") @Pattern(regexp = "1[3-9]\\d{9}", message = "手机号格式不正确") String phone,
             @NotBlank(message = "请选择会员等级") String level,
-            @NotNull(message = "请填写初始余额") @DecimalMin(value = "0", message = "余额不能为负") BigDecimal balance) {
+            @NotNull(message = "请填写初始余额") @DecimalMin(value = "0", message = "余额不能为负") BigDecimal balance,
+            /** 未成年会员标记：成年会员不开卡时不传（默认成年，流程完全不变） */
+            Boolean minorFlag,
+            /** 未成年会员出生日期（minorFlag=true 时必填） */
+            LocalDate birthDate) {
+
+        /** 兼容成年会员开卡（不传未成年标记，默认成年，流程完全不变） */
+        public MemberSaveReq(String cardNo, String name, String phone, String level, BigDecimal balance) {
+            this(cardNo, name, phone, level, balance, false, null);
+        }
     }
 
     public record RechargeReq(
@@ -52,6 +61,9 @@ public final class MemberDtos {
             String mergedIntoCardNo,
             LocalDateTime mergedAt,
             String mergeReason,
-            String mergedBy) {
+            String mergedBy,
+            /** 未成年会员标记 + 出生日期（成年会员为 false / null，流程不变） */
+            Boolean minorFlag,
+            LocalDate birthDate) {
     }
 }

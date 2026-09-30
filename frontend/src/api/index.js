@@ -157,11 +157,37 @@ export const certApi = {
   memberCerts: (memberId) => http.get(`/cert/members/${memberId}`)
 }
 
-export const statsApi = {
-  board: () => http.get('/stats/board')
+/** 模块十一：未成年会员监护授权台（授权链版本化 + 每次到馆现场交接） */
+export const guardianApi = {
+  options: () => http.get('/guardian/options'),
+  // 授权链
+  listConsents: (memberId) => http.get('/guardian/consents', { params: { memberId } }),
+  consentDetail: (id) => http.get(`/guardian/consents/${id}`),
+  createConsent: (data) => http.post('/guardian/consents', data),
+  updateDraft: (id, data) => http.post(`/guardian/consents/${id}/draft`, data),
+  submit: (id, data) => http.post(`/guardian/consents/${id}/submit`, data),
+  confirm: (id, data) => http.post(`/guardian/consents/${id}/confirm`, data),
+  recall: (id, data) => http.post(`/guardian/consents/${id}/recall`, data),
+  newVersion: (id, data) => http.post(`/guardian/consents/${id}/versions`, data),
+  suspend: (id, data) => http.post(`/guardian/consents/${id}/suspend`, data),
+  resume: (id, data) => http.post(`/guardian/consents/${id}/resume`, data),
+  revoke: (id, data) => http.post(`/guardian/consents/${id}/revoke`, data),
+  // 到馆交接
+  listVisits: (params) => http.get('/guardian/visits', { params }),
+  visitDetail: (id) => http.get(`/guardian/visits/${id}`),
+  createVisit: (data) => http.post('/guardian/visits', data),
+  pickup: (id, data) => http.post(`/guardian/visits/${id}/pickup`, data),
+  release: (id, data) => http.post(`/guardian/visits/${id}/release`, data),
+  recheck: (id, data) => http.post(`/guardian/visits/${id}/recheck`, data),
+  trimResources: (id, data) => http.post(`/guardian/visits/${id}/trim-resources`, data),
+  requestReturn: (id, data) => http.post(`/guardian/visits/${id}/request-return`, data),
+  completeReturn: (id, data) => http.post(`/guardian/visits/${id}/return`, data),
+  cancelVisit: (id, data) => http.post(`/guardian/visits/${id}/cancel`, data)
 }
 
-/** 时间小工具：后端 DATETIME 出来是 "yyyy-MM-dd HH:mm:ss" */
+export const statsApi = {
+  board: () => http.get('/stats/board')
+}/** 时间小工具：后端 DATETIME 出来是 "yyyy-MM-dd HH:mm:ss" */
 export const shortTime = (value) => (value ? String(value).slice(5, 16) : '')
 
 export const shortDate = (value) => (value ? String(value).slice(0, 10) : '')

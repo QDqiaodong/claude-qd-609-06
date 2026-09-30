@@ -69,6 +69,14 @@ public class Member {
     @Column(name = "merged_by", length = 32)
     private String mergedBy;
 
+    /** 未成年会员标记：成年会员流程完全不变；未成年会员的课程 / 箭道 / 器材入口受监护授权台约束 */
+    @Column(name = "minor_flag", nullable = false)
+    private boolean minorFlag = false;
+
+    /** 出生日期（未成年会员登记，供核验年龄） */
+    @Column(name = "birth_date")
+    private LocalDate birthDate;
+
     public Long getId() {
         return id;
     }
@@ -171,5 +179,21 @@ public class Member {
 
     public void setMergedBy(String mergedBy) {
         this.mergedBy = mergedBy;
+    }
+
+    public boolean isMinorFlag() {
+        return minorFlag;
+    }
+
+    public void setMinorFlag(boolean minorFlag) {
+        this.minorFlag = minorFlag;
+    }
+
+    public LocalDate getBirthDate() {
+        return birthDate;
+    }
+
+    public void setBirthDate(LocalDate birthDate) {
+        this.birthDate = birthDate;
     }
 }

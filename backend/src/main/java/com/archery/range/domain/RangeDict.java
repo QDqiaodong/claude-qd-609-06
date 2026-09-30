@@ -570,4 +570,126 @@ public final class RangeDict {
     public static String tournamentActionName(String action) {
         return action == null ? "" : TOURNAMENT_ACTION.getOrDefault(action, action);
     }
+
+    // ---------------- 未成年会员监护授权台 ----------------
+    /** 授权链状态：草稿 → 待监护人确认 → 有效 ⇄ 暂停 → 撤销 */
+    private static final Map<String, String> GUARDIAN_CONSENT_STATUS = Map.of(
+            "DRAFT", "草稿",
+            "PENDING_CONFIRM", "待监护人确认",
+            "VALID", "有效",
+            "SUSPENDED", "暂停",
+            "REVOKED", "撤销");
+
+    /** 授权版本状态（比链多：已被取代 / 已拒绝，旧版本仍可查询） */
+    private static final Map<String, String> CONSENT_VERSION_STATUS = Map.of(
+            "DRAFT", "草稿",
+            "PENDING_CONFIRM", "待监护人确认",
+            "VALID", "有效",
+            "SUPERSEDED", "已被取代",
+            "SUSPENDED", "暂停",
+            "REVOKED", "已撤销",
+            "REJECTED", "已拒绝");
+
+    /** 到馆交接阶段 */
+    private static final Map<String, String> VISIT_STATUS = Map.of(
+            "PENDING_PICKUP", "待接管",
+            "TRAINING", "训练中",
+            "PENDING_RETURN", "待交还",
+            "RETURNED", "已交还",
+            "CANCELED", "已取消");
+
+    /** 交接资源类型 */
+    private static final Map<String, String> VISIT_RESOURCE_TYPE = Map.of(
+            "COURSE", "课程",
+            "LANE", "箭道",
+            "EQUIPMENT", "器材");
+
+    /** 交接资源台账状态 */
+    private static final Map<String, String> VISIT_RESOURCE_STATUS = Map.of(
+            "PENDING", "待放行",
+            "RELEASED", "已放行",
+            "FROZEN", "已冻结",
+            "REJECTED", "已拦截");
+
+    /** 监护人 / 接管人与未成年人关系 */
+    private static final Map<String, String> GUARDIAN_RELATION = Map.of(
+            "FATHER", "父亲",
+            "MOTHER", "母亲",
+            "GRANDPARENT", "祖父母 / 外祖父母",
+            "OTHER", "其他法定监护人");
+
+    /** 监护授权台角色 */
+    private static final Map<String, String> GUARDIAN_ROLE = Map.of(
+            "FRONT", "前台",
+            "COACH", "教练",
+            "KEEPER", "器材管理员",
+            "MANAGER", "值班经理",
+            "GUARDIAN", "监护人",
+            "SYSTEM", "授权系统");
+
+    /** 授权链轨迹动作 */
+    private static final Map<String, String> GUARDIAN_ACTION = Map.of(
+            "CREATE", "建立授权链",
+            "SUBMIT", "提交监护人确认",
+            "CONFIRM", "监护人确认生效",
+            "REJECT", "监护人拒绝确认",
+            "RECALL", "撤回到草稿",
+            "NEW_VERSION", "发布新版本",
+            "SUPERSEDE", "旧版本被取代",
+            "SUSPEND", "暂停授权",
+            "RESUME", "恢复授权",
+            "REVOKE", "撤销授权");
+
+    /** 现场交接轨迹动作 */
+    private static final Map<String, String> VISIT_ACTION = Map.of(
+            "CREATE", "建立到馆交接",
+            "PICKUP", "现场接管",
+            "RELEASE", "训练资源放行",
+            "BLOCK", "放行拦截",
+            "FREEZE", "授权基线漂移冻结",
+            "RECHECK", "按新基线重新核对",
+            "WAIT_RETURN", "训练结束待交还",
+            "EXCEPTION", "异常处置",
+            "RETURN", "安全交还",
+            "CANCEL", "取消交接");
+
+    public static boolean isValidGuardianRelation(String relation) {
+        return relation != null && GUARDIAN_RELATION.containsKey(relation);
+    }
+
+    public static String guardianRelationName(String relation) {
+        return relation == null ? "" : GUARDIAN_RELATION.getOrDefault(relation, relation);
+    }
+
+    public static String consentStatusName(String status) {
+        return status == null ? "" : GUARDIAN_CONSENT_STATUS.getOrDefault(status, status);
+    }
+
+    public static String consentVersionStatusName(String status) {
+        return status == null ? "" : CONSENT_VERSION_STATUS.getOrDefault(status, status);
+    }
+
+    public static String visitStatusName(String status) {
+        return status == null ? "" : VISIT_STATUS.getOrDefault(status, status);
+    }
+
+    public static String visitResourceTypeName(String type) {
+        return type == null ? "" : VISIT_RESOURCE_TYPE.getOrDefault(type, type);
+    }
+
+    public static String visitResourceStatusName(String status) {
+        return status == null ? "" : VISIT_RESOURCE_STATUS.getOrDefault(status, status);
+    }
+
+    public static String guardianRoleName(String role) {
+        return role == null ? "" : GUARDIAN_ROLE.getOrDefault(role, role);
+    }
+
+    public static String guardianActionName(String action) {
+        return action == null ? "" : GUARDIAN_ACTION.getOrDefault(action, action);
+    }
+
+    public static String visitActionName(String action) {
+        return action == null ? "" : VISIT_ACTION.getOrDefault(action, action);
+    }
 }

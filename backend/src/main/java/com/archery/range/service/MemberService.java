@@ -72,6 +72,16 @@ public class MemberService {
         if (!RangeDict.isValidMemberLevel(req.level())) {
             throw new BizException("会员等级只能是 普通 / 银 / 金");
         }
+        boolean minor = Boolean.TRUE.equals(req.minorFlag());
+        if (minor) {
+            if (req.birthDate() == null) {
+                throw new BizException("未成年会员请填写出生日期");
+            }
+            // 未成年 = 出生日期晚于 18 年前的今天；当天满 18 周岁按成年登记
+            if (!req.birthDate().isAfter(LocalDate.now().minusYears(18))) {
+                throw new BizException("出生日期已满 18 周岁，应按成年会员登记（请勿勾选未成年标记）");
+            }
+        }
         Member member = new Member();
         member.setCardNo(req.cardNo());
         member.setName(req.name());
@@ -80,6 +90,8 @@ public class MemberService {
         member.setBalance(req.balance().setScale(2, RoundingMode.HALF_UP));
         member.setRegisterDate(LocalDate.now());
         member.setTotalSpend(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+        member.setMinorFlag(minor);
+        member.setBirthDate(minor ? req.birthDate() : null);
         return toView(memberRepository.save(member));
     }
 
@@ -183,6 +195,8 @@ public class MemberService {
                 mergedIntoCardNo,
                 member.getMergedAt(),
                 member.getMergeReason(),
-                member.getMergedBy());
+                member.getMergedBy(),
+                member.isMinorFlag(),
+                member.getBirthDate());
     }
 }

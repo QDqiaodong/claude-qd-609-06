@@ -31,7 +31,12 @@
             <el-tag v-if="row.status === 'MERGED'" size="small" type="info" effect="plain">已封存</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="姓名" width="110" />
+        <el-table-column label="姓名" width="130">
+          <template #default="{ row }">
+            {{ row.name }}
+            <el-tag v-if="row.minorFlag" size="small" type="warning" effect="dark">未成年</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="phone" label="手机号" width="140" />
         <el-table-column label="等级" width="120">
           <template #default="{ row }">
@@ -94,6 +99,13 @@
           </el-select>
         </el-form-item>
         <el-form-item label="初始余额"><el-input-number v-model="createForm.balance" :min="0" :step="100" /></el-form-item>
+        <el-form-item label="未成年会员">
+          <el-checkbox v-model="createForm.minorFlag">未成年（未满 18 周岁，须登记监护授权后才能进场）</el-checkbox>
+        </el-form-item>
+        <el-form-item v-if="createForm.minorFlag" label="出生日期" required>
+          <el-date-picker v-model="createForm.birthDate" type="date" value-format="YYYY-MM-DD"
+            placeholder="选择出生日期" style="width: 100%" />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
@@ -513,7 +525,8 @@ const pick = ref(null)
 const certPick = ref(null)
 const rechargeAmount = ref(200)
 const certData = ref({ current: [], history: [] })
-const createForm = reactive({ cardNo: '', name: '', phone: '', level: 'NORMAL', balance: 200 })
+const createForm = reactive({ cardNo: '', name: '', phone: '', level: 'NORMAL', balance: 200,
+  minorFlag: false, birthDate: null })
 
 // 个人最好（按可比组别）
 const bestsVisible = ref(false)
@@ -620,12 +633,18 @@ async function submitCreate() {
     ElMessage.warning('请填写卡号与姓名')
     return
   }
+  if (createForm.minorFlag && !createForm.birthDate) {
+    ElMessage.warning('未成年会员请填写出生日期')
+    return
+  }
   await memberApi.create({ ...createForm, cardNo: createForm.cardNo.trim(), name: createForm.name.trim() })
   ElMessage.success('开卡成功')
   createVisible.value = false
   createForm.cardNo = ''
   createForm.name = ''
   createForm.phone = ''
+  createForm.minorFlag = false
+  createForm.birthDate = null
   await loadMembers()
 }
 

@@ -38,6 +38,8 @@ public class StatsService {
     private final CertApplicationRepository certApplicationRepository;
     private final com.archery.range.repository.DamageSettlementRepository damageSettlementRepository;
     private final com.archery.range.repository.MemberDebtRepository memberDebtRepository;
+    private final com.archery.range.repository.GuardianConsentRepository guardianConsentRepository;
+    private final com.archery.range.repository.MinorVisitRepository minorVisitRepository;
     private final RoundService roundService;
 
     public StatsService(LaneRepository laneRepository,
@@ -51,6 +53,8 @@ public class StatsService {
             CertApplicationRepository certApplicationRepository,
             com.archery.range.repository.DamageSettlementRepository damageSettlementRepository,
             com.archery.range.repository.MemberDebtRepository memberDebtRepository,
+            com.archery.range.repository.GuardianConsentRepository guardianConsentRepository,
+            com.archery.range.repository.MinorVisitRepository minorVisitRepository,
             RoundService roundService) {
         this.laneRepository = laneRepository;
         this.memberRepository = memberRepository;
@@ -63,6 +67,8 @@ public class StatsService {
         this.certApplicationRepository = certApplicationRepository;
         this.damageSettlementRepository = damageSettlementRepository;
         this.memberDebtRepository = memberDebtRepository;
+        this.guardianConsentRepository = guardianConsentRepository;
+        this.minorVisitRepository = minorVisitRepository;
         this.roundService = roundService;
     }
 
@@ -88,6 +94,12 @@ public class StatsService {
         counters.put("tournamentOngoing", tournamentRepository.countByStatus("ONGOING"));
         counters.put("damageSettling", damageSettlementRepository.findByStatusNotOrderByIdDesc("SETTLED").size());
         counters.put("debtUnpaid", memberDebtRepository.countUnpaid());
+        counters.put("minorTotal",
+                memberRepository.findByMinorFlagTrueAndStatusOrderByIdAsc("ACTIVE").size());
+        counters.put("guardianPending",
+                guardianConsentRepository.countByStatus("PENDING_CONFIRM"));
+        counters.put("visitOpen", minorVisitRepository.findByStatusInOrderByIdDesc(
+                java.util.List.of("PENDING_PICKUP", "TRAINING", "PENDING_RETURN")).size());
 
         List<RoundDtos.RoundView> top = roundRepository.findByStatusOrderByStartTimeDesc("SUBMITTED").stream()
                 .sorted(Comparator.comparingInt((com.archery.range.domain.Round r) ->

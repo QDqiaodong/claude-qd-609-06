@@ -21,11 +21,14 @@ public class CourseService {
     private final CourseRepository courseRepository;
     private final CourseEnrollRepository enrollRepository;
     private final MemberService memberService;
+    private final MinorVisitService minorVisitService;
 
-    public CourseService(CourseRepository courseRepository, CourseEnrollRepository enrollRepository, MemberService memberService) {
+    public CourseService(CourseRepository courseRepository, CourseEnrollRepository enrollRepository,
+            MemberService memberService, MinorVisitService minorVisitService) {
         this.courseRepository = courseRepository;
         this.enrollRepository = enrollRepository;
         this.memberService = memberService;
+        this.minorVisitService = minorVisitService;
     }
 
     @Transactional(readOnly = true)
@@ -76,6 +79,16 @@ public class CourseService {
         if (RangeDict.memberLevelRank(member.getLevel()) < RangeDict.memberLevelRank(needLevel)) {
             throw new BizException(RangeDict.courseLevelName(course.getLevel()) + "课程仅面向"
                     + RangeDict.memberLevelName(needLevel) + "及以上，会员 [" + member.getName() + "] 等级不足");
+        }
+        // 未成年会员报名：课程必须被当前有效监护授权版本覆盖（签到当天还须完成到馆接管与训练放行）
+        if (member.isMinorFlag()) {
+            com.archery.range.domain.GuardianConsentVersion effective =
+                    minorVisitService.consentEffectiveForMember(member);
+            if (!minorVisitService.isCourseCovered(effective, id)) {
+                throw new BizException("监护授权 v" + effective.getVersionNo() + " 的课程范围不包含「"
+                        + course.getCourseName() + "」，未成年会员 [" + member.getName()
+                        + "] 不能报名；请监护人调整课程范围（发布新版本重新确认）");
+            }
         }
         CourseEnroll enroll = new CourseEnroll();
         enroll.setCourse(course);

@@ -39,11 +39,14 @@ public class RoundService {
     private final RoundRepository roundRepository;
     private final MemberRepository memberRepository;
     private final LaneRepository laneRepository;
+    private final MinorVisitService minorVisitService;
 
-    public RoundService(RoundRepository roundRepository, MemberRepository memberRepository, LaneRepository laneRepository) {
+    public RoundService(RoundRepository roundRepository, MemberRepository memberRepository,
+            LaneRepository laneRepository, MinorVisitService minorVisitService) {
         this.roundRepository = roundRepository;
         this.memberRepository = memberRepository;
         this.laneRepository = laneRepository;
+        this.minorVisitService = minorVisitService;
     }
 
     @Transactional(readOnly = true)
@@ -93,6 +96,12 @@ public class RoundService {
                 : req.bowType().trim().toUpperCase();
         if (!RangeDict.isValidBowType(bowType)) {
             throw new BizException("弓种只能是 反曲弓 / 复合弓 / 传统弓");
+        }
+        // 未成年会员训练签到：当前授权与本次现场交接必须同时满足，且该箭道已在交接中整组放行
+        if (member.isMinorFlag()) {
+            minorVisitService.guard(member,
+                    com.archery.range.domain.MinorVisitResource.LANE, lane.getId(),
+                    "训练签到（箭道 " + lane.getLaneNo() + "）");
         }
 
         Round round = new Round();

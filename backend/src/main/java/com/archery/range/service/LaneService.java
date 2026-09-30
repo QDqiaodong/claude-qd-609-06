@@ -21,11 +21,14 @@ public class LaneService {
     private final LaneRepository laneRepository;
     private final MemberService memberService;
     private final CertService certService;
+    private final MinorVisitService minorVisitService;
 
-    public LaneService(LaneRepository laneRepository, MemberService memberService, CertService certService) {
+    public LaneService(LaneRepository laneRepository, MemberService memberService, CertService certService,
+            MinorVisitService minorVisitService) {
         this.laneRepository = laneRepository;
         this.memberService = memberService;
         this.certService = certService;
+        this.minorVisitService = minorVisitService;
     }
 
     @Transactional(readOnly = true)
@@ -85,6 +88,11 @@ public class LaneService {
         memberService.rejectIfMerged(member, "开台");
         // 30 / 50 米为认证射距：必须持有覆盖该射距的当前有效弓种认证（过期 / 撤回 / 被取代立即失效）
         certService.requireDistanceCert(member, lane.getDistance());
+        // 未成年会员：当前授权 + 本次现场交接同时满足（箭道被版本范围覆盖且训练已放行）才允许开台
+        if (member.isMinorFlag()) {
+            minorVisitService.guard(member,
+                    com.archery.range.domain.MinorVisitResource.LANE, lane.getId(), "开台 [" + lane.getLaneNo() + "]");
+        }
         BigDecimal cost = lane.getHourlyPrice()
                 .multiply(BigDecimal.valueOf(req.hours()))
                 .multiply(RangeDict.memberDiscount(member.getLevel()))

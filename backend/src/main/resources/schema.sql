@@ -32,11 +32,14 @@ CREATE TABLE IF NOT EXISTS members (
   merged_at     DATETIME     NULL COMMENT '合并封存时间',
   merge_reason  VARCHAR(500) NULL COMMENT '合并原因（值班经理填写）',
   merged_by     VARCHAR(32)  NULL COMMENT '执行合并的值班经理',
+  minor_flag    TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '未成年会员标记：1 未成年（课程 / 箭道 / 器材均受监护授权台约束）/ 0 成年（流程不变）',
+  birth_date    DATE         NULL COMMENT '出生日期（未成年会员登记，供核验年龄）',
   PRIMARY KEY (id),
   UNIQUE KEY uk_card_no (card_no),
   UNIQUE KEY uk_phone (phone),
   KEY idx_members_status (status),
-  KEY idx_members_merged_into (merged_into_id)
+  KEY idx_members_merged_into (merged_into_id),
+  KEY idx_members_minor (minor_flag)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ================= 模块九：重复会员档案合并 =================
@@ -1023,3 +1026,271 @@ INSERT INTO damage_pricing_rule (`id`, `equip_type`, `severity`, `effective_date
 INSERT INTO damage_pricing_rule (`id`, `equip_type`, `severity`, `effective_date`, `fee`, `repair_flag`, `scrap_flag`, `status`, `note`, `created_by`, `created_at`) VALUES (15, 'ARROW', 'SEVERE', '2026-09-01', 120.00, 0, 1, 'ACTIVE', '箭杆断裂 / 箭头松动无法修复：收费并报废封存', '值班经理', '2026-09-01 09:00:00');
 
 INSERT INTO cert_log (`id`, `application_id`, `action`, `operator`, `role`, `detail`, `created_at`) VALUES (10, 3, 'WITHDRAW', '王铮', 'COACH', '撤回认证：抽查发现证据窗口与实际训练记录不符，撤回并要求重新评定', '2026-09-25 15:00:00');
+
+-- ================= 模块十一：未成年会员监护授权台 =================
+-- 监护授权链：每个未成年会员一条链，链上串起不可变的授权版本。
+-- 链状态 DRAFT 草稿 → PENDING_CONFIRM 待监护人确认 → VALID 有效 ⇄ SUSPENDED 暂停 → REVOKED 撤销。
+-- 监护人确认后才能有效；范围（课程 / 箭道 / 器材 / 接管人）或生效日、终止日任一变化都必须发布新版本重新确认，
+-- 旧版本转 SUPERSEDED，仍可查询但不得继续放行。
+CREATE TABLE IF NOT EXISTS guardian_consent (
+  id               BIGINT       NOT NULL AUTO_INCREMENT,
+  consent_no       VARCHAR(24)  NOT NULL COMMENT '授权单号',
+  member_id        BIGINT       NOT NULL COMMENT '未成年会员',
+  guardian_name    VARCHAR(32)  NOT NULL COMMENT '监护人姓名',
+  guardian_phone   VARCHAR(20)  NOT NULL COMMENT '监护人手机号',
+  guardian_relation VARCHAR(16) NOT NULL COMMENT '与未成年人关系：FATHER 父 / MOTHER 母 / OTHER 其他法定监护人',
+  status           VARCHAR(20)  NOT NULL COMMENT 'DRAFT / PENDING_CONFIRM / VALID / SUSPENDED / REVOKED',
+  current_version_id BIGINT     NULL COMMENT '当前版本 id（草稿时为草稿版本；有效 / 暂停时为现行版本）',
+  emergency_contact_name  VARCHAR(32)  NOT NULL COMMENT '紧急联系人姓名',
+  emergency_contact_phone VARCHAR(20)  NOT NULL COMMENT '紧急联系人电话',
+  remark           VARCHAR(500) NULL COMMENT '必要备注（过敏史 / 特殊照护等）',
+  created_by       VARCHAR(32)  NOT NULL COMMENT '建立授权链的前台',
+  created_at       DATETIME     NOT NULL,
+  updated_at       DATETIME     NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_consent_no (consent_no),
+  KEY idx_consent_member (member_id),
+  CONSTRAINT fk_consent_member FOREIGN KEY (member_id) REFERENCES members (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 授权版本：内容（生效日 / 终止日 / 课程 / 箭道 / 器材 / 接管人 / 备注）一经建立即冻结不可改写；
+-- 监护人确认是版本生效的唯一入口。状态 DRAFT / PENDING_CONFIRM / VALID / SUPERSEDED / SUSPENDED / REVOKED / REJECTED。
+-- 新版本发布时，被取代的旧 VALID 版本原子转 SUPERSEDED（连同链上当前版本指针一起切换），
+-- 已经把旧版本钉为现场基线的到馆交接不受影响（基线不可篡改），但不能再凭旧版本放行新动作。
+CREATE TABLE IF NOT EXISTS guardian_consent_version (
+  id               BIGINT       NOT NULL AUTO_INCREMENT,
+  consent_id       BIGINT       NOT NULL,
+  version_no       INT          NOT NULL COMMENT '版本号，从 1 递增',
+  status           VARCHAR(20)  NOT NULL COMMENT 'DRAFT / PENDING_CONFIRM / VALID / SUPERSEDED / SUSPENDED / REVOKED / REJECTED',
+  effective_from   DATE         NOT NULL COMMENT '生效日',
+  effective_until  DATE         NOT NULL COMMENT '终止日',
+  version_remark   VARCHAR(500) NULL COMMENT '本版本必要备注',
+  -- 监护人确认
+  confirmed_by     VARCHAR(32)  NULL COMMENT '确认监护人（现场登记的确认人姓名）',
+  confirmed_at     DATETIME     NULL,
+  confirm_relation VARCHAR(16)  NULL COMMENT '确认人身份关系（与 guardian_relation 核对）',
+  confirm_note     VARCHAR(500) NULL,
+  -- 拒绝 / 暂停 / 撤销 / 取代的留痕
+  rejected_by      VARCHAR(32)  NULL,
+  rejected_at      DATETIME     NULL,
+  reject_reason    VARCHAR(500) NULL,
+  superseded_by_version_id BIGINT NULL COMMENT '由哪个新版本取代',
+  superseded_at    DATETIME     NULL,
+  suspended_by     VARCHAR(32)  NULL,
+  suspended_at     DATETIME     NULL,
+  suspend_reason   VARCHAR(500) NULL,
+  revoked_by       VARCHAR(32)  NULL,
+  revoked_at       DATETIME     NULL,
+  revoke_reason    VARCHAR(500) NULL,
+  -- 内容指纹：确认 / 接管 / 放行时比对，防止「同版本号但内容已变」
+  content_fingerprint VARCHAR(64) NOT NULL,
+  created_by       VARCHAR(32)  NOT NULL,
+  created_at       DATETIME     NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_consent_version_no (consent_id, version_no),
+  KEY idx_cv_consent (consent_id, status),
+  CONSTRAINT fk_cv_consent FOREIGN KEY (consent_id) REFERENCES guardian_consent (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 版本-课程范围（一组课程作为整体校验：任一项不覆盖则整体不放行）
+CREATE TABLE IF NOT EXISTS guardian_consent_course (
+  id         BIGINT NOT NULL AUTO_INCREMENT,
+  version_id BIGINT NOT NULL,
+  course_id  BIGINT NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_gc_course (version_id, course_id),
+  KEY idx_gc_course_course (course_id),
+  CONSTRAINT fk_gc_course_version FOREIGN KEY (version_id) REFERENCES guardian_consent_version (id),
+  CONSTRAINT fk_gc_course_course FOREIGN KEY (course_id) REFERENCES courses (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 版本-箭道范围
+CREATE TABLE IF NOT EXISTS guardian_consent_lane (
+  id         BIGINT NOT NULL AUTO_INCREMENT,
+  version_id BIGINT NOT NULL,
+  lane_id    BIGINT NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_gc_lane (version_id, lane_id),
+  KEY idx_gc_lane_lane (lane_id),
+  CONSTRAINT fk_gc_lane_version FOREIGN KEY (version_id) REFERENCES guardian_consent_version (id),
+  CONSTRAINT fk_gc_lane_lane FOREIGN KEY (lane_id) REFERENCES lanes (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 版本-器材范围
+CREATE TABLE IF NOT EXISTS guardian_consent_equipment (
+  id           BIGINT NOT NULL AUTO_INCREMENT,
+  version_id   BIGINT NOT NULL,
+  equipment_id BIGINT NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_gc_equip (version_id, equipment_id),
+  KEY idx_gc_equip_equip (equipment_id),
+  CONSTRAINT fk_gc_equip_version FOREIGN KEY (version_id) REFERENCES guardian_consent_version (id),
+  CONSTRAINT fk_gc_equip_equip FOREIGN KEY (equipment_id) REFERENCES equipment (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 版本-允许承担现场接管责任的人员（接送人名单；实际接管人必须在名单内）
+CREATE TABLE IF NOT EXISTS guardian_consent_pickup (
+  id         BIGINT       NOT NULL AUTO_INCREMENT,
+  version_id BIGINT       NOT NULL,
+  person_name VARCHAR(32)  NOT NULL COMMENT '接管人姓名',
+  id_no      VARCHAR(32)  NOT NULL COMMENT '证件号（身份证后四位等现场核验标识）',
+  phone      VARCHAR(20)  NOT NULL COMMENT '接管人手机号',
+  relation   VARCHAR(16)  NOT NULL COMMENT '与未成年人关系：FATHER / MOTHER / GRANDPARENT / OTHER',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_gc_pickup (version_id, person_name, id_no),
+  CONSTRAINT fk_gc_pickup_version FOREIGN KEY (version_id) REFERENCES guardian_consent_version (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 每次到馆的现场交接记录（独立单据）：阶段 PENDING_PICKUP 待接管 → TRAINING 训练中
+-- → PENDING_RETURN 待交还 → RETURNED 已交还；未实际接管的单据可 CANCELED 取消。
+-- 接管时把当时的有效授权版本钉为现场基线 baseline_version_id；基线此后变化（新版本 / 暂停 / 撤销）
+-- 不改写已发生事实，只把冻结位置 1：尚未开始的课程 / 箭道 / 器材动作立即冻结，需工作人员按新基线重新核对。
+CREATE TABLE IF NOT EXISTS minor_visit (
+  id                BIGINT       NOT NULL AUTO_INCREMENT,
+  visit_no          VARCHAR(24)  NOT NULL COMMENT '交接单号',
+  member_id         BIGINT       NOT NULL COMMENT '未成年会员',
+  status            VARCHAR(20)  NOT NULL COMMENT 'PENDING_PICKUP / TRAINING / PENDING_RETURN / RETURNED / CANCELED',
+  -- 现场基线
+  consent_id        BIGINT       NOT NULL COMMENT '接管时核对的授权链',
+  baseline_version_id BIGINT     NOT NULL COMMENT '接管时钉住的授权版本（历史事实，不随后续换版改写）',
+  baseline_fingerprint VARCHAR(64) NOT NULL COMMENT '接管时版本内容指纹',
+  baseline_frozen   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '基线是否已漂移：1 已冻结未开始动作，需重新核对',
+  freeze_reason     VARCHAR(500) NULL,
+  frozen_at         DATETIME     NULL,
+  -- 实际接管人（接管时核验证件，必须在基线版本接管人名单内）
+  pickup_person_name VARCHAR(32) NULL,
+  pickup_person_idno VARCHAR(32) NULL,
+  pickup_person_phone VARCHAR(20) NULL,
+  pickup_person_relation VARCHAR(16) NULL,
+  pickup_operator   VARCHAR(32)  NULL COMMENT '办理接管的前台',
+  pickup_at         DATETIME     NULL,
+  -- 训练开始（课程签到放行）
+  start_operator    VARCHAR(32)  NULL COMMENT '训练开始放行的教练',
+  started_at        DATETIME     NULL,
+  -- 交还：必须由合格接管人完成；managerOverride=1 为值班经理异常处置（必须填写原因）
+  return_person_name VARCHAR(32) NULL,
+  return_person_idno VARCHAR(32) NULL,
+  return_person_phone VARCHAR(20) NULL,
+  return_person_relation VARCHAR(16) NULL,
+  qualified_pickup  TINYINT(1)   NULL COMMENT '交还人是否在基线版本接管人名单内',
+  manager_override  TINYINT(1)   NOT NULL DEFAULT 0,
+  override_manager  VARCHAR(32)  NULL,
+  override_reason   VARCHAR(500) NULL,
+  return_operator   VARCHAR(32)  NULL COMMENT '办理交还的前台',
+  returned_at       DATETIME     NULL,
+  -- 取消（仅待接管可取消）
+  cancel_operator   VARCHAR(32)  NULL,
+  canceled_at       DATETIME     NULL,
+  cancel_reason     VARCHAR(500) NULL,
+  created_by        VARCHAR(32)  NOT NULL,
+  created_at        DATETIME     NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_visit_no (visit_no),
+  KEY idx_visit_member_status (member_id, status),
+  KEY idx_visit_open (member_id, status),
+  CONSTRAINT fk_visit_member FOREIGN KEY (member_id) REFERENCES members (id),
+  CONSTRAINT fk_visit_consent FOREIGN KEY (consent_id) REFERENCES guardian_consent (id),
+  CONSTRAINT fk_visit_version FOREIGN KEY (baseline_version_id) REFERENCES guardian_consent_version (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 交接单-资源放行台账：接管时声明本次要用的课程 / 箭道 / 器材（一组整体校验），
+-- 训练开始前逐项放行；任一不覆盖则整组拒绝，绝不留下部分放行。
+-- status PENDING 待放行 → RELEASED 已放行 → FROZEN 基线漂移冻结；REJECTED 为整组校验失败登记。
+CREATE TABLE IF NOT EXISTS minor_visit_resource (
+  id          BIGINT       NOT NULL AUTO_INCREMENT,
+  visit_id    BIGINT       NOT NULL,
+  resource_type VARCHAR(16) NOT NULL COMMENT 'COURSE 课程 / LANE 箭道 / EQUIPMENT 器材',
+  resource_id BIGINT       NOT NULL,
+  resource_label VARCHAR(64) NOT NULL COMMENT '资源名称快照（课程名 / 道号 / 器材编号）',
+  status      VARCHAR(16)  NOT NULL COMMENT 'PENDING / RELEASED / FROZEN / REJECTED',
+  release_operator VARCHAR(32) NULL,
+  released_at DATETIME     NULL,
+  reject_reason VARCHAR(500) NULL,
+  created_at  DATETIME     NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_visit_resource (visit_id, resource_type, resource_id),
+  KEY idx_visit_resource (visit_id, status),
+  CONSTRAINT fk_vr_visit FOREIGN KEY (visit_id) REFERENCES minor_visit (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 授权链 / 版本状态轨迹：建立 / 提交确认 / 监护人确认 / 拒绝 / 发新版本（旧版取代）/ 暂停 / 恢复 / 撤销，全程留痕。
+-- before_status / after_status 与 version_no 记录变化前后的授权基线；detail 留存原因与范围摘要。
+CREATE TABLE IF NOT EXISTS guardian_consent_log (
+  id           BIGINT       NOT NULL AUTO_INCREMENT,
+  consent_id   BIGINT       NOT NULL,
+  version_id   BIGINT       NULL COMMENT '相关版本（纯链级动作可为空）',
+  version_no   INT          NULL,
+  action       VARCHAR(24)  NOT NULL COMMENT 'CREATE / SUBMIT / CONFIRM / REJECT / RECALL / NEW_VERSION / SUPERSEDE / SUSPEND / RESUME / REVOKE',
+  before_status VARCHAR(20) NULL,
+  after_status  VARCHAR(20) NULL,
+  operator     VARCHAR(32)  NOT NULL,
+  role         VARCHAR(16)  NOT NULL COMMENT 'FRONT 前台 / GUARDIAN 监护人 / MANAGER 值班经理 / SYSTEM 授权系统',
+  detail       VARCHAR(500) NULL,
+  created_at   DATETIME     NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_gcl_consent (consent_id),
+  CONSTRAINT fk_gcl_consent FOREIGN KEY (consent_id) REFERENCES guardian_consent (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 现场交接轨迹：建单 / 接管 / 整组放行 / 拦截 / 基线冻结 / 重新核对 / 异常处置 / 交还 / 取消，全程留痕。
+CREATE TABLE IF NOT EXISTS minor_visit_log (
+  id          BIGINT       NOT NULL AUTO_INCREMENT,
+  visit_id    BIGINT       NOT NULL,
+  action      VARCHAR(24)  NOT NULL COMMENT 'CREATE / PICKUP / RELEASE / BLOCK / FREEZE / RECHECK / EXCEPTION / RETURN / CANCEL',
+  stage       VARCHAR(16)  NULL COMMENT '动作发生时交接阶段',
+  operator    VARCHAR(32)  NOT NULL,
+  role        VARCHAR(16)  NOT NULL COMMENT 'FRONT 前台 / COACH 教练 / KEEPER 器材管理员 / MANAGER 值班经理 / GUARDIAN 监护人 / SYSTEM 授权系统',
+  detail      VARCHAR(500) NULL,
+  created_at  DATETIME     NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_mvl_visit (visit_id),
+  CONSTRAINT fk_mvl_visit FOREIGN KEY (visit_id) REFERENCES minor_visit (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 未成年会员种子：许静（id=10）、唐宁（id=12）标记为未成年并补出生日期；吴桐（id=6）为待确认授权的未成年会员
+UPDATE members SET minor_flag = 1, birth_date = '2011-06-15' WHERE id = 10;
+UPDATE members SET minor_flag = 1, birth_date = '2012-11-08' WHERE id = 12;
+UPDATE members SET minor_flag = 1, birth_date = '2010-09-01' WHERE id = 6;
+
+-- 许静（id=10）：授权链 1，v2 已确认为当前有效版本（v1 已被取代，可查但不放行）
+INSERT INTO guardian_consent (`id`, `consent_no`, `member_id`, `guardian_name`, `guardian_phone`, `guardian_relation`, `status`, `current_version_id`, `emergency_contact_name`, `emergency_contact_phone`, `remark`, `created_by`, `created_at`, `updated_at`) VALUES (1, 'G20260912001', 10, '许建国', '13900000010', 'FATHER', 'VALID', 2, '许建国', '13900000010', '青霉素过敏；仅限苏禾教练课程', '前台-马倩', '2026-09-12 10:00:00', '2026-09-20 16:00:00');
+
+INSERT INTO guardian_consent_version (`id`, `consent_id`, `version_no`, `status`, `effective_from`, `effective_until`, `version_remark`, `confirmed_by`, `confirmed_at`, `confirm_relation`, `confirm_note`, `superseded_by_version_id`, `superseded_at`, `content_fingerprint`, `created_by`, `created_at`) VALUES (1, 1, 1, 'SUPERSEDED', '2026-09-12', '2026-12-31', '初版授权', '许建国', '2026-09-12 10:10:00', 'FATHER', '现场签字确认', 2, '2026-09-20 16:00:00', 'seed-v1-20260912', '前台-马倩', '2026-09-12 10:00:00');
+INSERT INTO guardian_consent_version (`id`, `consent_id`, `version_no`, `status`, `effective_from`, `effective_until`, `version_remark`, `confirmed_by`, `confirmed_at`, `confirm_relation`, `confirm_note`, `content_fingerprint`, `created_by`, `created_at`) VALUES (2, 1, 2, 'VALID', '2026-09-20', '2026-12-31', '增加传统弓课程与 E-TR-01 器材范围，更新接管人手机号', '许建国', '2026-09-20 16:10:00', 'FATHER', '现场核对证件后确认', 'seed-v2-20260920', '前台-马倩', '2026-09-20 16:00:00');
+
+-- v1 范围：课程 9 / 箭道 1,3 / 器材 9 / 接管人 许建国
+INSERT INTO guardian_consent_course (`id`, `version_id`, `course_id`) VALUES (1, 1, 9);
+INSERT INTO guardian_consent_lane (`id`, `version_id`, `lane_id`) VALUES (1, 1, 1), (2, 1, 3);
+INSERT INTO guardian_consent_equipment (`id`, `version_id`, `equipment_id`) VALUES (1, 1, 9);
+INSERT INTO guardian_consent_pickup (`id`, `version_id`, `person_name`, `id_no`, `phone`, `relation`) VALUES (1, 1, '许建国', '1234', '13900000010', 'FATHER');
+-- v2 范围：课程 8,9 / 箭道 1,3,4 / 器材 7,9,11 / 接管人 许建国、王秀兰（祖母）
+INSERT INTO guardian_consent_course (`id`, `version_id`, `course_id`) VALUES (2, 2, 8), (3, 2, 9);
+INSERT INTO guardian_consent_lane (`id`, `version_id`, `lane_id`) VALUES (3, 2, 1), (4, 2, 3), (5, 2, 4);
+INSERT INTO guardian_consent_equipment (`id`, `version_id`, `equipment_id`) VALUES (2, 2, 7), (3, 2, 9), (4, 2, 11);
+INSERT INTO guardian_consent_pickup (`id`, `version_id`, `person_name`, `id_no`, `phone`, `relation`) VALUES (2, 2, '许建国', '1234', '13900000010', 'FATHER'), (3, 2, '王秀兰', '5678', '13900000011', 'GRANDPARENT');
+
+-- 吴桐（id=6）：授权链 2，v1 处于待监护人确认（草稿已提交，尚不能放行）
+INSERT INTO guardian_consent (`id`, `consent_no`, `member_id`, `guardian_name`, `guardian_phone`, `guardian_relation`, `status`, `current_version_id`, `emergency_contact_name`, `emergency_contact_phone`, `remark`, `created_by`, `created_at`, `updated_at`) VALUES (2, 'G20260928001', 6, '吴丽华', '13900000020', 'MOTHER', 'PENDING_CONFIRM', 3, '吴丽华', '13900000020', NULL, '前台-马倩', '2026-09-28 18:00:00', '2026-09-28 18:00:00');
+INSERT INTO guardian_consent_version (`id`, `consent_id`, `version_no`, `status`, `effective_from`, `effective_until`, `content_fingerprint`, `created_by`, `created_at`) VALUES (3, 2, 1, 'PENDING_CONFIRM', '2026-09-28', '2027-03-31', 'seed-pending-20260928', '前台-马倩', '2026-09-28 18:00:00');
+INSERT INTO guardian_consent_course (`id`, `version_id`, `course_id`) VALUES (4, 3, 2), (5, 3, 9);
+INSERT INTO guardian_consent_lane (`id`, `version_id`, `lane_id`) VALUES (6, 3, 3), (7, 3, 4);
+INSERT INTO guardian_consent_equipment (`id`, `version_id`, `equipment_id`) VALUES (5, 3, 1), (6, 3, 9);
+INSERT INTO guardian_consent_pickup (`id`, `version_id`, `person_name`, `id_no`, `phone`, `relation`) VALUES (4, 3, '吴丽华', '2222', '13900000020', 'MOTHER');
+
+-- 许静一笔已完成的历史交接（v1 基线，已安全交还；历史事实保留可查）
+INSERT INTO minor_visit (`id`, `visit_no`, `member_id`, `status`, `consent_id`, `baseline_version_id`, `baseline_fingerprint`, `baseline_frozen`, `pickup_person_name`, `pickup_person_idno`, `pickup_person_phone`, `pickup_person_relation`, `pickup_operator`, `pickup_at`, `start_operator`, `started_at`, `return_person_name`, `return_person_idno`, `return_person_phone`, `return_person_relation`, `qualified_pickup`, `manager_override`, `return_operator`, `returned_at`, `created_by`, `created_at`) VALUES (1, 'V20260920001', 10, 'RETURNED', 1, 1, 'seed-v1-20260912', 0, '许建国', '1234', '13900000010', 'FATHER', '前台-马倩', '2026-09-20 09:30:00', '苏禾', '2026-09-20 09:35:00', '许建国', '1234', '13900000010', 'FATHER', 1, 0, '前台-马倩', '2026-09-20 11:30:00', '前台-马倩', '2026-09-20 09:30:00');
+INSERT INTO minor_visit_resource (`id`, `visit_id`, `resource_type`, `resource_id`, `resource_label`, `status`, `release_operator`, `released_at`, `created_at`) VALUES (1, 1, 'COURSE', 9, '青少年安全射箭课', 'RELEASED', '苏禾', '2026-09-20 09:35:00', '2026-09-20 09:30:00'), (2, 1, 'LANE', 3, 'A03', 'RELEASED', '苏禾', '2026-09-20 09:35:00', '2026-09-20 09:30:00'), (3, 1, 'EQUIPMENT', 9, 'E-GR-01', 'RELEASED', '苏禾', '2026-09-20 09:35:00', '2026-09-20 09:30:00');
+
+INSERT INTO guardian_consent_log (`id`, `consent_id`, `version_id`, `version_no`, `action`, `before_status`, `after_status`, `operator`, `role`, `detail`, `created_at`) VALUES (1, 1, 1, 1, 'CREATE', NULL, 'DRAFT', '前台-马倩', 'FRONT', '建立监护授权链：许静；监护人 许建国；v1 草稿', '2026-09-12 10:00:00');
+INSERT INTO guardian_consent_log (`id`, `consent_id`, `version_id`, `version_no`, `action`, `before_status`, `after_status`, `operator`, `role`, `detail`, `created_at`) VALUES (2, 1, 1, 1, 'CONFIRM', 'PENDING_CONFIRM', 'VALID', '许建国', 'GUARDIAN', '监护人现场确认 v1，有效期 2026-09-12 至 2026-12-31', '2026-09-12 10:10:00');
+INSERT INTO guardian_consent_log (`id`, `consent_id`, `version_id`, `version_no`, `action`, `before_status`, `after_status`, `operator`, `role`, `detail`, `created_at`) VALUES (3, 1, 2, 2, 'NEW_VERSION', 'VALID', 'PENDING_CONFIRM', '前台-马倩', 'FRONT', '范围变更：新增课程「传统弓礼仪与技法」、器材 E-TR-01 / E-AR-01、箭道 A04，接管人新增 王秀兰', '2026-09-20 16:00:00');
+INSERT INTO guardian_consent_log (`id`, `consent_id`, `version_id`, `version_no`, `action`, `before_status`, `after_status`, `operator`, `role`, `detail`, `created_at`) VALUES (4, 1, 1, 1, 'SUPERSEDE', 'VALID', 'SUPERSEDED', '授权系统', 'SYSTEM', 'v2 确认生效，v1 转已取代：旧版本可查但不得继续放行', '2026-09-20 16:10:00');
+INSERT INTO guardian_consent_log (`id`, `consent_id`, `version_id`, `version_no`, `action`, `before_status`, `after_status`, `operator`, `role`, `detail`, `created_at`) VALUES (5, 1, 2, 2, 'CONFIRM', 'PENDING_CONFIRM', 'VALID', '许建国', 'GUARDIAN', '监护人现场确认 v2，有效期 2026-09-20 至 2026-12-31', '2026-09-20 16:10:00');
+INSERT INTO guardian_consent_log (`id`, `consent_id`, `version_id`, `version_no`, `action`, `before_status`, `after_status`, `operator`, `role`, `detail`, `created_at`) VALUES (6, 2, 3, 1, 'CREATE', NULL, 'DRAFT', '前台-马倩', 'FRONT', '建立监护授权链：吴桐；监护人 吴丽华；v1 草稿', '2026-09-28 18:00:00');
+INSERT INTO guardian_consent_log (`id`, `consent_id`, `version_id`, `version_no`, `action`, `before_status`, `after_status`, `operator`, `role`, `detail`, `created_at`) VALUES (7, 2, 3, 1, 'SUBMIT', 'DRAFT', 'PENDING_CONFIRM', '前台-马倩', 'FRONT', '提交监护人确认', '2026-09-28 18:00:00');
+
+INSERT INTO minor_visit_log (`id`, `visit_id`, `action`, `stage`, `operator`, `role`, `detail`, `created_at`) VALUES (1, 1, 'CREATE', NULL, '前台-马倩', 'FRONT', '建立到馆交接单，等待接管人到场', '2026-09-20 09:30:00');
+INSERT INTO minor_visit_log (`id`, `visit_id`, `action`, `stage`, `operator`, `role`, `detail`, `created_at`) VALUES (2, 1, 'PICKUP', 'PENDING_PICKUP', '前台-马倩', 'FRONT', '接管人 许建国（尾号1234）现场核验通过，钉住授权 v1 基线', '2026-09-20 09:30:00');
+INSERT INTO minor_visit_log (`id`, `visit_id`, `action`, `stage`, `operator`, `role`, `detail`, `created_at`) VALUES (3, 1, 'RELEASE', 'TRAINING', '苏禾', 'COACH', '训练开始前整组校验通过：课程 青少年安全射箭课、箭道 A03、器材 E-GR-01 均在 v1 范围内', '2026-09-20 09:35:00');
+INSERT INTO minor_visit_log (`id`, `visit_id`, `action`, `stage`, `operator`, `role`, `detail`, `created_at`) VALUES (4, 1, 'RETURN', 'PENDING_RETURN', '前台-马倩', 'FRONT', '交还人 许建国 在 v1 接管人名单内，安全交还完成', '2026-09-20 11:30:00');
+
